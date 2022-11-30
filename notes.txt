@@ -1,0 +1,112 @@
+kubernet process
+
+(docker build -t marcosilveira39/hello-go:v9.6 .)
+(docker push marcosilveira39/hello-go:v9.6)
+entrar no pod (kubectl exec -it nomeDoPod -- bash)
+apagar pods (kubectl delete deploy mysql)
+
+
+#colocar para rodar
+	kind create cluster --config=k8s/kind.yaml --name=fc
+	kubectl cluster-info --context kind-fc
+	kubectl get nodes
+	kubectl apply -f k8s/secret.yaml
+	kubectl apply -f k8s/configmap-env.yaml
+	kubectl apply -f k8s/configmap-family.yaml
+	kubectl apply -f k8s/loadbalancer.yaml
+	kubectl apply -f k8s/deployment.yaml
+	kubectl get pods # verifica as instancias do aplicativo que estão rodando
+
+#rollout (voltar uma revisão em caso de erro)
+	kubectl rollout history deployment goserver	# mostra as revisões
+	kubectl rollout undo deployment goserver # volta a versão anterior
+	kubectl rollout undo deployment goserver --to-revision=??? # volta a uma versão expecifica
+
+#hpa (horizontal pod autoscale)
+	#preparar para usar hpa
+	#instalando metric-server (github.com/kubernetes-sigs/metrics-server
+	# baixar o componentes para modificacao com wget https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+	# renomeie o component.yaml para metrics-server.yaml
+	# inclua --bubelet-insecure-tls na parte de deployment do arquivo. Isso serve para desligar o trafego seguro e conseguir rodar localmente.
+	kubectl apply -f k8s/metrics-server.yaml
+	kubectl get apiservices # verifica os serviços que estao rodando
+	# vCPU = 1000m (milicores). o paramentro cpu do resources do documento deployment.yaml pode ser configurado na forma de (milicores 500m) ou (percentual 0.5)
+	kubectl apply -f k8s/deployment.yaml
+	kubectl top pod podname # verifica os recursos que o pod esta utilizando
+	criar o arquivo hpa.yaml
+	kubectl apply -f k8s/hpa.yaml
+	kubectl get hpa # verifica os recursos utilizados pelo development
+	#fortio (github.com/fortio/fortio) pode usar k6.io tambem
+		# teste de stress
+			kubectl run -it fortio --rm --image=fortio/fortio -- load -qps 800 -t 120s -c 70 "http://goserver-service:8080/healthz"
+			watch -n1 kubectl get hpa # (visualizar o autoscaling acontecendo)
+
+#volumes persistentes
+	kubectl apply -f k8s/pvc.yaml
+	kubectl get pvc
+	kubectl get storageclass
+	# tem que alterar o deployment para adicionar o volume e ponto de montagem
+		aplica a modificação com kubectl apply -f k8s/deployment.yaml
+	volume criado e pode ser verificado com kubectl get pvc
+	
+	# statefulset
+		# cria pods mysql
+		kubectl apply -f k8s/statefulset.yaml	
+	# headless service
+		kubectl delete statefulset mysql
+		kubectl apply -f k8s/statefulset.yaml
+		kubectl apply -f k8s/mysql-service-h.yaml
+		kubectl get service
+		apartir de agora pode-se acessar a instancia mysql pelo seu nome (mysql-0.mysql-h)
+
+	# volumes dinamicos
+		kubectl delete statefulset mysql
+		kubectl apply -f k8s/statefulsetdinamico.yaml
+		# para verificas se os volumes foram criados
+			kubectl get pvc
+
+	Obs do professor:
+		Acredito que o grande potencial do kubernets é trabalhar com aplicações stateless.
+		Não trabalho com banco de dados dentro do kubernetes
+
+
+
+instruções para produção
+
+GKE = Google Kubernetes Engine
+para aplicar todos os manifestos de uma unica vez em nosso kubernetes:
+	kubectl apply -f k8s
+
+# ingress
+	Uma vez configurado o ingress junto com nginx na cloud pode alterar o loadbalancer.yaml para ClusterIP,
+	desta forma o IP externo é desligado e se economiza.
+
+# cert manager
+	siga as regras para intalar o cert manager:
+		https://cert-manager.io/docs/installation/kubectl/
+	aplicar o cluster-issuer
+		kubectl apply -f certmanager/cluster-issuer.yaml
+	fazer as modificações para o dominio no ingress.yaml e aplicar
+		kubectl apply -f ingress/ingress.yaml
+	verificar certificado
+		kubectl get certificates
+		kubectl describe certificate letsencrypt-tls
+
+# namespaces
+	kubectl create ns xxxx
+	kubectl get ns
+	para aplicar um deploymente em um namespace
+		kubectl apply -f xxx.yaml -n=xxxx
+		pode-se colocar tambem no arquivo .yaml na spec "namespace: xxx"
+	pode-se criar contextos para se trabalhar com aplicações em modo dev e prod
+
+# proteger as accounts
+	kubectl apply -f security/security.yaml
+	kubectl apply -f security/deployment.yaml
+	
+
+
+
+	
+
+
